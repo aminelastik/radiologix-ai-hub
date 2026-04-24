@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  orthanc:
+    image: jodogne/orthanc-plugins:latest
+    container_name: radiologix-orthanc
+    ports:
+      - "8042:8042"
+      - "4242:4242"
+    environment:
+      ORTHANC__NAME: "Radiologix Orthanc"
+      ORTHANC__AUTHENTICATION_ENABLED: "true"
+      ORTHANC__REGISTERED_USERS: |
+        {
+          "orthanc": "orthanc"
+        }
+      ORTHANC__DICOM_WEB__ENABLE: "true"
+      ORTHANC__DICOM_WEB__ROOT: "/dicom-web/"
+    volumes:
+      - orthanc-storage:/var/lib/orthanc/db
+
+volumes:
+  orthanc-storage:

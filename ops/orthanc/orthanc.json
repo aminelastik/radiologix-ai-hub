@@ -1,0 +1,10 @@
+{
+  "Name": "Radiologix Orthanc",
+  "HttpServer": {
+    "Enabled": true,
+    "Port": 8042
+  },
+  "RegisteredUsers": {
+    "orthanc": "orthanc"
+  }
+}

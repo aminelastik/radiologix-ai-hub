@@ -12,6 +12,8 @@ const initialFiles = [
 const UploadPage = () => {
   const [files, setFiles] = useState(initialFiles);
   const [valid, setValid] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen">
@@ -23,7 +25,20 @@ const UploadPage = () => {
               <Upload className="mx-auto h-10 w-10 text-primary-glow" />
               <p className="mt-3 font-medium text-foreground">Drop DICOM files here</p>
               <p className="text-xs text-muted-foreground">or click to browse · .dcm files only</p>
-              <input type="file" multiple accept=".dcm" className="sr-only" />
+              <input
+                type="file"
+                multiple
+                accept=".dcm"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setSelectedFile(f);
+                  if (f) {
+                    setFiles((arr) => [{ name: f.name, size: `${(f.size / 1024 / 1024).toFixed(1)} MB`, progress: 0, status: "queued" }, ...arr]);
+                    setValid(true);
+                  }
+                }}
+              />
             </label>
           </Card>
 
@@ -86,9 +101,44 @@ const UploadPage = () => {
             </div>
             <Input label="Study Description" placeholder="Chest PA" />
             <Input label="Referring Physician" placeholder="Dr. Khan" />
-            <Button variant="gradient" className="w-full" disabled={!valid}>
+            <Button
+              variant="gradient"
+              className="w-full"
+              disabled={!valid}
+              onClick={async () => {
+                if (!selectedFile) {
+                  setStatus("No file selected");
+                  return;
+                }
+                setStatus("uploading");
+                // mark first file as uploading
+                setFiles((arr) => arr.map((f, i) => (i === 0 ? { ...f, status: "uploading", progress: 50 } : f)));
+
+                const fd = new FormData();
+                fd.append("file", selectedFile);
+
+                try {
+                  const res = await fetch("http://localhost:8000/upload-dicom", {
+                    method: "POST",
+                    body: fd,
+                  });
+                  const json = await res.json();
+                  if (res.ok && json.success) {
+                    setStatus("uploaded successfully");
+                    setFiles((arr) => arr.map((f, i) => (i === 0 ? { ...f, status: "done", progress: 100 } : f)));
+                  } else {
+                    setStatus("upload failed");
+                    setFiles((arr) => arr.map((f, i) => (i === 0 ? { ...f, status: "failed", progress: 0 } : f)));
+                  }
+                } catch (err) {
+                  setStatus("upload failed");
+                  setFiles((arr) => arr.map((f, i) => (i === 0 ? { ...f, status: "failed", progress: 0 } : f)));
+                }
+              }}
+            >
               Upload to PACS
             </Button>
+            {status && <p className="text-sm text-muted-foreground mt-2">{status}</p>}
           </Card>
 
           <Card className="p-6 border border-border/60">
