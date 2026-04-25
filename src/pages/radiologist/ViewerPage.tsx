@@ -24,21 +24,25 @@ type Study = {
 const ViewerPage = () => {
   const { studyId = "" } = useParams();
 
-  const [studies, setStudies] = useState<Study[] | null>(null);
+  const [study, setStudy] = useState<Study | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    fetch("http://localhost:8000/studies")
+    fetch(`http://localhost:8000/studies/${studyId}`)
       .then((res) => res.json())
-      .then((data: Study[]) => {
+      .then((data: Study) => {
         if (!mounted) return;
-        setStudies(data);
+        if (data.error) {
+          setStudy(null);
+        } else {
+          setStudy(data);
+        }
       })
       .catch((err) => {
-        console.error("Error fetching studies:", err);
-        if (mounted) setStudies([]);
+        console.error("Error fetching study:", err);
+        if (mounted) setStudy(null);
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -47,9 +51,9 @@ const ViewerPage = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [studyId]);
 
-  const selected = studies?.find((s) => String(s.id) === String(studyId));
+  const selected = study;
 
   const studyLabel = (s: Study) => s.study || `${s.modality || ""} ${s.bodyPart || ""}`.trim();
   const studyDate = (s: Study) => s.dateLabel || s.date || "";
@@ -91,6 +95,12 @@ const ViewerPage = () => {
               <p className="text-xs text-muted-foreground">Date</p>
               <p className="text-sm font-semibold text-foreground">{studyDate(selected)}</p>
             </div>
+            <Link
+              to={`/radiologist/patient/${selected.patientId || selected.id}`}
+              className="text-sm text-primary-glow hover:underline"
+            >
+              View Patient History
+            </Link>
           </Card>
         )}
 

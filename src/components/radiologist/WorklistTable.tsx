@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Eye, ChevronDown } from "lucide-react";
-import { Badge, Card, IconButton } from "@/ui";
+import { Badge, Card, IconButton, Input } from "@/ui";
 
 type AIResult = "Normal" | "Urgent" | "Abnormal";
 
@@ -25,6 +25,7 @@ const aiVariant = (r: AIResult): "info" | "warning" | "danger" => {
 
 export const WorklistTable = () => {
   const [studies, setStudies] = useState<Study[]>([]);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetch("http://localhost:8000/studies")
@@ -33,14 +34,29 @@ export const WorklistTable = () => {
       .catch((err) => console.error("Error fetching studies:", err));
   }, []);
 
+  const filteredStudies = studies.filter((s) =>
+    s.patientName.toLowerCase().includes(search.toLowerCase()) ||
+    (s.patientId && s.patientId.toLowerCase().includes(search.toLowerCase())) ||
+    (s.date && s.date.includes(search))
+  );
+
   return (
     <Card className="overflow-hidden border border-border/60">
       <div className="flex items-center justify-between p-5 border-b border-border/60">
         <h2 className="text-base font-semibold text-foreground">Recent Studies</h2>
-        <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 h-9 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
-          All Chest X-Rays
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        </button>
+        <div className="flex items-center gap-3">
+          <Input
+            type="text"
+            placeholder="Search patient name, ID, or date"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-64"
+          />
+          <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 h-9 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
+            All Chest X-Rays
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -57,7 +73,7 @@ export const WorklistTable = () => {
           </thead>
 
           <tbody className="divide-y divide-border/60">
-            {studies.map((s) => {
+            {filteredStudies.map((s) => {
               const result = s.aiResult || "Normal";
               const studyName = s.study || `${s.modality || ""} ${s.bodyPart || ""}`.trim();
 
@@ -96,7 +112,7 @@ export const WorklistTable = () => {
 
       <div className="flex items-center justify-between p-5 border-t border-border/60">
         <p className="text-xs text-muted-foreground">
-          Showing {studies.length} studies
+          Showing {filteredStudies.length} of {studies.length} studies
         </p>
       </div>
     </Card>

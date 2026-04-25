@@ -14,19 +14,16 @@ AUTH = ("orthanc", "orthanc")
 
 def get_studies():
     """Return a list of study IDs from Orthanc, or an empty list on error."""
-    # If requests is not installed, bail out early with empty list.
     if not requests:
         return []
     try:
         resp = requests.get(f"{ORTHANC_BASE}/studies", auth=AUTH, timeout=5)
         resp.raise_for_status()
         data = resp.json()
-        # Orthanc returns a JSON array of study IDs (strings)
         if isinstance(data, list):
             return data
         return []
     except Exception:
-        # Keep it simple: return empty list on any error.
         return []
 
 
@@ -43,16 +40,75 @@ def get_study(study_id: str):
 
 
 def upload_dicom(file_bytes: bytes):
-    """Upload raw DICOM bytes to Orthanc. Returns True on success, False otherwise.
+    """Upload raw DICOM bytes to Orthanc.
 
-    This keeps the function intentionally simple for demo purposes.
+    Returns:
+        {
+            "success": True,
+            "status_code": 200,
+            "instance_id": "...",
+            "study_id": "...",
+            "message": "DICOM uploaded successfully to Orthanc"
+        }
+
+        or
+
+        {
+            "success": False,
+            "status_code": 400,
+            "error": "Orthanc returned 400: ..."
+        }
     """
     if not requests:
-        return False
+        return {"success": False, "status_code": None, "error": "requests library not available"}
+
     try:
         headers = {"Content-Type": "application/dicom"}
         resp = requests.post(f"{ORTHANC_BASE}/instances", data=file_bytes, auth=AUTH, headers=headers, timeout=10)
-        resp.raise_for_status()
-        return True
-    except Exception:
-        return False
+        status_code = resp.status_code
+
+        if status_code < 200 or status_code >= 300:
+            return {
+                "success": False,
+                "status_code": status_code,
+                "error": f"Orthanc returned {status_code}: {resp.text.strip()}",
+            }
+
+        try:
+            response_json = resp.json()
+        except Exception:
+            response_json = {}
+
+        instance_id = response_json.get("ID")
+        if not instance_id:
+            return {
+                "success": False,
+                "status_code": status_code,
+                "error": "Orthanc did not return instance ID",
+            }
+
+        study_resp = requests.get(f"{ORTHANC_BASE}/instances/{instance_id}/study", auth=AUTH, timeout=5)
+        study_status_code = study_resp.status_code
+        if study_status_code < 200 or study_status_code >= 300:
+            return {
+                "success": False,
+                "status_code": study_status_code,
+                "instance_id": instance_id,
+                "error": f"Orthanc returned {study_status_code} when fetching study for instance {instance_id}",
+            }
+
+        study_json = study_resp.json()
+        study_id = study_json.get("ID")
+
+        return {
+            "success": True,
+            "status_code": status_code,
+            "instance_id": instance_id,
+            "study_id": study_id,
+            "message": "DICOM uploaded successfully to Orthanc",
+        }
+
+    except requests.exceptions.RequestException as exc:
+        return {"success": False, "status_code": None, "error": f"Orthanc request failed: {str(exc)}"}
+    except Exception as exc:
+        return {"success": False, "status_code": None, "error": f"Upload failed: {str(exc)}"}
