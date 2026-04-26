@@ -39,6 +39,30 @@ def get_study(study_id: str):
         return None
 
 
+def get_series(series_id: str):
+    """Return the raw Orthanc series JSON for a series id, or None on error."""
+    if not requests:
+        return None
+    try:
+        resp = requests.get(f"{ORTHANC_BASE}/series/{series_id}", auth=AUTH, timeout=5)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def get_instance(instance_id: str):
+    """Return the raw Orthanc instance JSON for an instance id, or None on error."""
+    if not requests:
+        return None
+    try:
+        resp = requests.get(f"{ORTHANC_BASE}/instances/{instance_id}", auth=AUTH, timeout=5)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
 def upload_dicom(file_bytes: bytes):
     """Upload raw DICOM bytes to Orthanc.
 

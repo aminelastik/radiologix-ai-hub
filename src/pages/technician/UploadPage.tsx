@@ -72,13 +72,24 @@ const UploadPage = () => {
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) {
-      setSelectedFiles([]);
-      setStatusMessage(null);
-      setStatusTone("info");
       return;
     }
 
-    setSelectedFiles(Array.from(files).map((file) => ({ file, status: "queued" })));
+    setSelectedFiles((current) => {
+      const existing = new Set(current.map((e) => `${e.file.name}_${e.file.size}_${e.file.lastModified}`));
+      const toAdd = Array.from(files)
+        .map((file) => ({ file, status: "queued" as UploadStatus }))
+        .filter((entry) => {
+          const key = `${entry.file.name}_${entry.file.size}_${entry.file.lastModified}`;
+          if (existing.has(key)) return false;
+          existing.add(key);
+          return true;
+        });
+
+      if (toAdd.length === 0) return current;
+      return [...current, ...toAdd];
+    });
+
     setStatusMessage(null);
     setStatusTone("info");
   };
@@ -258,7 +269,12 @@ const UploadPage = () => {
           </Card>
 
           <Card className="p-6 border border-border/60">
-            <h3 className="text-sm font-semibold mb-3">Selected Files</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold">Selected Files</h3>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedFiles([])} disabled={uploading || selectedFiles.length === 0}>
+                Clear
+              </Button>
+            </div>
             {selectedFiles.length > 0 ? (
               <ul className="space-y-2">
                 {selectedFiles.map((selectedFile, index) => (

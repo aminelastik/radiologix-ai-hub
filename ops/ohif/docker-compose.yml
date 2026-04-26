@@ -1,0 +1,17 @@
+version: '3.7'
+
+services:
+  ohif:
+    image: ohif/viewer:latest
+    container_name: radiologix_ohif
+    ports:
+      - "3000:80"
+    environment:
+      # Try to point OHIF at the Orthanc DICOMweb endpoint running on the host
+      # macOS Docker provides host.docker.internal to reach host services.
+      - DICOMWEB_BASE_URL=http://host.docker.internal:8042/dicom-web
+    restart: unless-stopped
+
+# Note: The official OHIF image may accept different env keys for default DICOMweb
+# servers depending on version. If the OHIF UI does not auto-connect, open
+# http://localhost:3000 and add the DICOMweb server: http://localhost:8042/dicom-web

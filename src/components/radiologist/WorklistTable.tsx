@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Eye, ChevronDown } from "lucide-react";
-import { Badge, Card, IconButton, Input } from "@/ui";
+import { Badge, Card, IconButton, Input, Button, Select } from "@/ui";
 
 type AIResult = "Normal" | "Urgent" | "Abnormal";
 
@@ -10,10 +10,14 @@ type Study = {
   patientId?: string;
   patientName: string;
   study?: string;
+  studyDescription?: string;
   modality?: string;
+  viewPosition?: string;
   bodyPart?: string;
   date?: string;
   dateLabel?: string;
+  instanceCount?: number;
+  seriesCount?: number;
   aiResult?: AIResult;
 };
 
@@ -26,19 +30,38 @@ const aiVariant = (r: AIResult): "info" | "warning" | "danger" => {
 export const WorklistTable = () => {
   const [studies, setStudies] = useState<Study[]>([]);
   const [search, setSearch] = useState("");
+  const [modalityFilter, setModalityFilter] = useState<string>("");
+
+  const fetchStudies = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/studies");
+      const data = await res.json();
+      setStudies(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Error fetching studies:", err);
+    }
+  };
 
   useEffect(() => {
-    fetch("http://localhost:8000/studies")
-      .then((res) => res.json())
-      .then((data) => setStudies(data))
-      .catch((err) => console.error("Error fetching studies:", err));
+    fetchStudies();
   }, []);
 
-  const filteredStudies = studies.filter((s) =>
-    s.patientName.toLowerCase().includes(search.toLowerCase()) ||
-    (s.patientId && s.patientId.toLowerCase().includes(search.toLowerCase())) ||
-    (s.date && s.date.includes(search))
-  );
+  const filteredStudies = studies.filter((s) => {
+    const q = search.toLowerCase();
+    return (
+      s.patientName.toLowerCase().includes(q) ||
+      (!!s.patientId && s.patientId.toLowerCase().includes(q)) ||
+      (!!s.study && s.study.toLowerCase().includes(q)) ||
+      (!!s.studyDescription && s.studyDescription.toLowerCase().includes(q)) ||
+      (!!s.modality && s.modality.toLowerCase().includes(q)) ||
+      (!!s.viewPosition && s.viewPosition.toLowerCase().includes(q)) ||
+      (!!s.date && s.date.includes(search))
+    );
+  });
+
+  const filteredAndFilteredByModality = modalityFilter && modalityFilter !== "ALL"
+    ? filteredStudies.filter((s) => (s.modality || "").toUpperCase() === modalityFilter)
+    : filteredStudies;
 
   return (
     <Card className="overflow-hidden border border-border/60">
@@ -52,10 +75,15 @@ export const WorklistTable = () => {
             onChange={(e) => setSearch(e.target.value)}
             className="w-64"
           />
-          <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 h-9 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
-            All Chest X-Rays
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          </button>
+          <Button variant="secondary" size="sm" onClick={fetchStudies}>
+            Refresh
+          </Button>
+          <Select value={modalityFilter} onChange={(e) => setModalityFilter(e.target.value)}>
+            <option value="">All Modalities</option>
+            <option value="ALL">All Modalities</option>
+            <option value="CR">CR</option>
+            <option value="DX">DX</option>
+          </Select>
         </div>
       </div>
 
@@ -65,7 +93,10 @@ export const WorklistTable = () => {
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-5 py-3 font-medium">Patient ID</th>
               <th className="px-5 py-3 font-medium">Name</th>
-              <th className="px-5 py-3 font-medium">Study</th>
+              <th className="px-5 py-3 font-medium">Study Description</th>
+              <th className="px-5 py-3 font-medium">Modality</th>
+              <th className="px-5 py-3 font-medium">View</th>
+              <th className="px-5 py-3 font-medium">Instances</th>
               <th className="px-5 py-3 font-medium">Date</th>
               <th className="px-5 py-3 font-medium">AI Result</th>
               <th className="px-5 py-3 font-medium text-right">Action</th>
@@ -73,21 +104,20 @@ export const WorklistTable = () => {
           </thead>
 
           <tbody className="divide-y divide-border/60">
-            {filteredStudies.map((s) => {
+            {filteredAndFilteredByModality.map((s) => {
               const result = s.aiResult || "Normal";
-              const studyName = s.study || `${s.modality || ""} ${s.bodyPart || ""}`.trim();
+              const studyName = s.studyDescription || s.study || `${s.modality || ""} ${s.bodyPart || ""}`.trim();
 
               return (
                 <tr key={s.id} className="hover:bg-secondary/40 transition-colors">
-                  <td className="px-5 py-4 font-mono text-primary-deep text-xs">
-                    {s.patientId || s.id}
-                  </td>
-                  <td className="px-5 py-4 font-medium text-foreground">
-                    {s.patientName}
-                  </td>
+                  <td className="px-5 py-4 font-mono text-primary-deep text-xs">{s.patientId || s.id}</td>
+                  <td className="px-5 py-4 font-medium text-foreground">{s.patientName}</td>
                   <td className="px-5 py-4">
                     <Badge variant="info">{studyName}</Badge>
                   </td>
+                  <td className="px-5 py-4">{s.modality || "—"}</td>
+                  <td className="px-5 py-4">{s.viewPosition || "—"}</td>
+                  <td className="px-5 py-4">{typeof s.instanceCount === "number" ? s.instanceCount : "—"}</td>
                   <td className="px-5 py-4">
                     <Badge variant="neutral">{s.dateLabel || s.date}</Badge>
                   </td>
@@ -105,14 +135,14 @@ export const WorklistTable = () => {
                   </td>
                 </tr>
               );
-            })} 
+            })}
           </tbody>
         </table>
       </div>
 
       <div className="flex items-center justify-between p-5 border-t border-border/60">
-        <p className="text-xs text-muted-foreground">
-          Showing {filteredStudies.length} of {studies.length} studies
+          <p className="text-xs text-muted-foreground">
+          Showing {filteredAndFilteredByModality.length} of {studies.length} studies
         </p>
       </div>
     </Card>

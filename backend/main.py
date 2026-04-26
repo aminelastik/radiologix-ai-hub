@@ -292,18 +292,87 @@ def get_studies():
             logger.info(f"Fetching metadata for study {sid}")
             raw = orthanc_client.get_study(sid)
             if raw:
-                # Extract from MainDicomTags
+                # Extract from MainDicomTags and, when needed, from Series/Instances
                 main_tags = raw.get("MainDicomTags", {})
                 patient_tags = raw.get("PatientMainDicomTags", {})
 
+                # Series and instance counts
+                series_ids = raw.get("Series", []) or []
+                series_count = len(series_ids)
+                instance_count = 0
+                # Try to compute instance count from series metadata if available
+                for series_id in series_ids:
+                    series_json = orthanc_client.get_series(series_id)
+                    if series_json and isinstance(series_json.get("Instances"), list):
+                        instance_count += len(series_json.get("Instances") or [])
+
+                # Fallback to Orthanc-provided NumberOfInstances
+                if instance_count == 0:
+                    instance_count = raw.get("NumberOfInstances") or 0
+
+                # Modality: prefer definitive modalities (CR/DX) from study, then series, then instances
+                modality = None
+                m = (main_tags.get("Modality") or "").upper()
+                if m and m not in ("DICOM", ""):
+                    modality = m
+
+                if not modality:
+                    for series_id in series_ids:
+                        series_json = orthanc_client.get_series(series_id)
+                        if not series_json:
+                            continue
+                        s_main = series_json.get("MainDicomTags", {})
+                        sm = (s_main.get("Modality") or "").upper()
+                        if sm and sm not in ("DICOM", ""):
+                            modality = sm
+                            break
+
+                # If still not found, inspect instances for ViewPosition/Modality
+                view_position = main_tags.get("ViewPosition")
+                if not modality or not view_position:
+                    for series_id in series_ids:
+                        series_json = orthanc_client.get_series(series_id)
+                        if not series_json:
+                            continue
+                        instances = series_json.get("Instances") or []
+                        for inst_id in instances:
+                            inst = orthanc_client.get_instance(inst_id)
+                            if not inst:
+                                continue
+                            inst_main = inst.get("MainDicomTags", {})
+                            if not modality:
+                                im = (inst_main.get("Modality") or "").upper()
+                                if im and im not in ("DICOM", ""):
+                                    modality = im
+                            if not view_position:
+                                vp = inst_main.get("ViewPosition")
+                                if vp:
+                                    view_position = vp
+                            if modality and view_position:
+                                break
+                        if modality and view_position:
+                            break
+
+                # Final fallbacks
+                if not modality:
+                    modality = main_tags.get("Modality") or "Unknown"
+
+                study_description = main_tags.get("StudyDescription") or main_tags.get("SeriesDescription") or "Unknown"
+                date_val = main_tags.get("StudyDate") or "Unknown"
+
                 study = {
                     "id": sid,
-                    "patientId": patient_tags.get("PatientID", main_tags.get("PatientID", sid)),
-                    "patientName": patient_tags.get("PatientName", main_tags.get("PatientName", "Unknown Patient")),
-                    "modality": main_tags.get("Modality", "DICOM"),
+                    "patientId": patient_tags.get("PatientID", main_tags.get("PatientID", sid)) or "Unknown",
+                    "patientName": patient_tags.get("PatientName", main_tags.get("PatientName", "Unknown Patient")) or "Unknown",
+                    "modality": modality,
+                    "studyInstanceUID": main_tags.get("StudyInstanceUID") or None,
                     "bodyPart": main_tags.get("BodyPartExamined", "Unknown"),
-                    "study": main_tags.get("StudyDescription", "Study"),
-                    "date": main_tags.get("StudyDate", "Unknown"),
+                    "study": study_description,
+                    "studyDescription": study_description,
+                    "viewPosition": view_position or None,
+                    "instanceCount": int(instance_count or 0),
+                    "seriesCount": int(series_count or 0),
+                    "date": date_val,
                     "status": "Pending",
                     "priority": "Normal",
                 }
@@ -522,8 +591,13 @@ def get_single_study(study_id: str):
             "patientId": patient_tags.get("PatientID", main_tags.get("PatientID", study_id)),
             "patientName": patient_tags.get("PatientName", main_tags.get("PatientName", "Unknown Patient")),
             "modality": main_tags.get("Modality", "DICOM"),
+            "studyInstanceUID": main_tags.get("StudyInstanceUID"),
             "bodyPart": main_tags.get("BodyPartExamined", "Unknown"),
             "study": main_tags.get("StudyDescription", "Study"),
+            "studyDescription": main_tags.get("StudyDescription", "Study"),
+            "viewPosition": main_tags.get("ViewPosition"),
+            "instanceCount": orthanc_study.get("NumberOfInstances") or 0,
+            "seriesCount": len(orthanc_study.get("Series", [])),
             "date": main_tags.get("StudyDate", "Unknown"),
             "status": "Pending",
             "priority": "Normal",

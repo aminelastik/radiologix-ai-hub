@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, memo } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { OHIFViewerPlaceholder } from "@/components/viewer/OHIFViewerPlaceholder";
@@ -19,6 +19,7 @@ type Study = {
   date?: string;
   dateLabel?: string;
   aiResult?: AIResult;
+  studyInstanceUID?: string | null;
 };
 
 const ViewerPage = () => {
@@ -54,6 +55,39 @@ const ViewerPage = () => {
   }, [studyId]);
 
   const selected = study;
+
+  const ohifUrl = useMemo(() => {
+    const uid = (selected as any)?.studyInstanceUID;
+    if (uid) {
+      return `http://localhost:8042/ohif/viewer?StudyInstanceUIDs=${encodeURIComponent(uid)}`;
+    }
+    return "http://localhost:8042/ohif/";
+  }, [selected?.studyInstanceUID]);
+
+  // Default load behavior: auto-load only for single-instance studies.
+  const instanceCount = useMemo(() => Number((selected as any)?.instanceCount ?? 1), [selected?.instanceCount]);
+  const [ohifLoadRequested, setOhifLoadRequested] = useState(() => instanceCount === 1);
+
+  // When the selected study changes, enforce defaults: never auto-load for multi-instance studies.
+  useEffect(() => {
+    setOhifLoadRequested(instanceCount === 1);
+  }, [instanceCount]);
+
+  const OHIFFrame = useMemo(() =>
+    memo(function OHIFFrame({ url, load }: { url: string; load: boolean }) {
+      if (!load) return null;
+      return (
+        <iframe
+          title="OHIF Viewer"
+          src={url}
+          style={{ width: "100%", height: "100%", border: 0 }}
+          loading="lazy"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-popups"
+        />
+      );
+    }),
+    [],
+  );
 
   const studyLabel = (s: Study) => s.study || `${s.modality || ""} ${s.bodyPart || ""}`.trim();
   const studyDate = (s: Study) => s.dateLabel || s.date || "";
@@ -106,7 +140,62 @@ const ViewerPage = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-5">
           <div className="lg:col-span-7 space-y-4">
-            <OHIFViewerPlaceholder studyId={studyId} />
+            <div className="border border-border/60 rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-secondary/50 text-sm text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>OHIF Viewer</span>
+                    <a
+                      href={ohifUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary-glow hover:underline"
+                    >
+                      Open OHIF in new tab
+                    </a>
+                  </div>
+
+                  {instanceCount > 1 ? (
+                    <div className="mt-3 text-sm text-muted-foreground">
+                      <p>This study contains multiple instances. For better performance, open OHIF in a new tab.</p>
+                      <div className="mt-2 flex items-center gap-3">
+                        <a href={ohifUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-glow hover:underline">
+                          Open OHIF in new tab
+                        </a>
+                        <button
+                          type="button"
+                          className="text-sm text-muted-foreground hover:underline"
+                          onClick={() => setOhifLoadRequested(true)}
+                        >
+                          Load embedded viewer anyway
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      {ohifLoadRequested ? (
+                        <button
+                          className="text-sm text-muted-foreground hover:underline"
+                          onClick={() => setOhifLoadRequested(false)}
+                          type="button"
+                        >
+                          Unload OHIF Viewer
+                        </button>
+                      ) : (
+                        <button
+                          className="text-sm text-primary-glow hover:underline"
+                          onClick={() => setOhifLoadRequested(true)}
+                          type="button"
+                        >
+                          Load OHIF Viewer
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div style={{ height: 600 }}>
+                  <OHIFFrame url={ohifUrl} load={ohifLoadRequested && instanceCount <= 1 ? true : ohifLoadRequested} />
+                </div>
+            </div>
             <ThumbnailStrip />
           </div>
           <div className="lg:col-span-3">
